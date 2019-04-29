@@ -20,7 +20,7 @@ clc
 % VISUALIZATION. Make a seperate function. also useful for checking in the
 % slm software.
 %
-fpathPat=uigetdir('X:\','Please choose the folder containing patterns');
+fpathPat=uigetdir('/gpfs/data/shohamlab/shared_data/jon_2p_data/','Please choose the folder containing patterns');
 fnamesPat = dir(fullfile(fpathPat,'*.mat'));
 
 % Check number of holograms, set up variables

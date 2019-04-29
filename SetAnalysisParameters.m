@@ -1,5 +1,5 @@
 function [StimLength,Omitpre,Omitpost,prefigs,postfigs,red_channel] = SetAnalysisParameters()
-load('X:\Data\TP stimulation system\Analysis_Parameters.mat');
+load('/gpfs/home/stetlb01/Holography_Analysis/Analysis_Parameters.mat');
 params = inputdlg({'Enter stimulation length [ms]:','Enter the aquisition frames per second:','Enter # of frames to average pre stimulation:',...
     'Enter # of frames to average post stimulation:' 'Did you record the red channel as well? [Yes-1, No-0]' 'Save as a new default ? [Yes-1, No-0]'}, 'Analysis parameters', 1,...
     {num2str(StimLength),num2str(fps),num2str(prefigs),num2str(postfigs),num2str(red_channel),num2str(0)});
