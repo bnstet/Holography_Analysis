@@ -74,7 +74,7 @@ end
 % TODO: WTF, let's just have one function that reads everything in.
 
 [fnameH5, fpathH5]=uigetfile('*.h5',...
-    'Please choose the hdf5 file of the experiment','X:\Data');
+    'Please choose the hdf5 file of the experiment','/gpfs/data/shohamlab/shared_data/jon_2p_data/');
 % [fnameH5, fpathH5]=uigetfile('*.h5','Please choose the hdf5 file of the experiment');
 
 % Extract pharospower? 0 = no, 1 = yes. Don't set to 1 if you don't have
@@ -96,7 +96,7 @@ Pharospower=0;
 
 %% Checking how many images we have in all the relevant files
 [name,path]=uigetfile('*.tif',...
-    'Please choose the first Tiff Stack files of this session','X:\Data');
+    'Please choose the Tiff Stack files of this session','/gpfs/data/shohamlab/shared_data/jon_2p_data/');
 
 [tiffInfo]=tiff_info(name,path,redchannel);
 
@@ -155,10 +155,10 @@ for idx = 1:length(tiffInfo.filelist)
     
     % Get path and file name (needed for legacy Stack2Figs)
     path = tiffInfo.pathlist{idx}(1:end-length(tiffInfo.filelist(idx).name));
-    name = tiffInfo.filelist(idx).name;
+    thisName = tiffInfo.filelist(idx).name;
     
     % Read in the tiff
-    [Stack,num_images_temp,fnameStack,fpathStack] = Stack2Figs(name,path,redchannel);
+    [Stack,num_images_temp,fnameStack,fpathStack] = Stack2Figs(thisName,path,redchannel);
 
     % Calculating the fluorescence signal from each frame for all cells
     for frame=initialFrame+1:initialFrame+num_images_temp
@@ -232,8 +232,8 @@ end
 
 for plotidx2=1:size(dFvec,1)
     axes('parent',tab(ceil(plotidx2/10)));
-    %plots2(plotidx2)=subplot(spot_num+1,13,(plotidx2-10*floor((plotidx2-1)/10)-1)*13+6);
-    plots2(plotidx2)=subplot(10+1,20,(plotidx2-10*floor((plotidx2-1)/10)-1)*20+1:(plotidx2-10*floor((plotidx2-1)/10)-1)*20+2);
+    %plots2(plotidx2)=subplot(spot_num+1,5,(plotidx2-10*floor((plotidx2-1)/10)-1)*13+6);
+    plots2(plotidx2)=subplot(10+1,5,(plotidx2-10*floor((plotidx2-1)/10)-1)*5+1:(plotidx2-10*floor((plotidx2-1)/10)-1)*5+2);
     %plots2(plotidx2)=subplot(10,3,plotidx2);
     dFcell = [dFvec{plotidx2}{:}];
     dFavg(plotidx2,:)=mean([dFvec{plotidx2}{:}],2);
@@ -261,81 +261,81 @@ for plotidx2=1:size(dFvec,1)
 end
 
 %% plotting dF/F , sniff and triggers time
-for plotidx=1:spot_num
-    axes('parent',tab(ceil(plotidx/10)));
-    MdF=mean(dF(:,plotidx));SdF=std(dF(:,plotidx));
-    plots(plotidx)=subplot(10+1,12,(plotidx-10*floor((plotidx-1)/10)-1)*12+3:...
-                               (plotidx-10*floor((plotidx-1)/10)-1)*12+12);
-    %    % d1 = designfilt('bandpassiir','FilterOrder',1, ...
-    %          'CutoffFrequency1',.1,'CutoffFrequency2',4, ...
-    %          'SampleRate',30,'DesignMethod','butter');
-    %    % d1 = designfilt('bandpassfir','FilterOrder',1, ...
-    %          %'HalfPowerFrequency',0.15,'DesignMethod','butter');
-    d1 = designfilt('bandpassfir','FilterOrder',8, ...
-        'CutoffFrequency1',0.5,'CutoffFrequency2',3, ...
-        'SampleRate',30);
-    yfilt = filtfilt(d1,dF(:,plotidx));
-    
-    plot(m.ftrig_shift,yfilt,'b');
-    ylim([MdF-2*SdF MdF+2.5*SdF]);
-        ylabel('\DeltaF/F_0'); 
-        hold on;
-    %     plot(m.ftrig_shift,dF(:,plotidx),'b');ylim([MdF-2*SdF MdF+2.5*SdF]); ylabel('\DeltaF/F_0');hold on;
-    %     for plotline=2:size(m.time(m.shutter_timing>0),2)-1 % This is because we remove the first and last stims
-    % for plotline=2:size(StimEff,2) % This is because we remove the first and last stims
-    for idx1 = 1:size(patternTrials{plotidx},1)
-        stimNum = patternTrials{plotidx}(idx1);
-        if ~ismember(stimNum,m.excludedTrials) % just toss unwanted trials
-            linetime = m.shonset_shift(stimNum); %use real stim num indexing.
-            plot([linetime, linetime],[get(plots(plotidx),'ylim')],'--r')
-        end
-    end
-    
-%         for plotline=1:size(m.time(m.shutter_timing>0),2)
-%             linetime=m.time(m.shutter_timing>0);
-%             plot([linetime(plotline),linetime(plotline)],...
-%                         [get(plots(plotidx),'ylim')],'--r')
-%             %     if plotline<size(m.time(m.shutter_timing>0),2)
-%             %         if StimEff(plotidx,plotline)==1
-%             %             rectangle('Position',[linetime(plotline) MdF-2*SdF 500 SdF/5],'EdgeColor','g','FaceColor','g')
-%             %         end
-%             %     end
+% for plotidx=1:spot_num
+%     axes('parent',tab(ceil(plotidx/10)));
+%     MdF=mean(dF(:,plotidx));SdF=std(dF(:,plotidx));
+%     plots(plotidx)=subplot(10+1,12,(plotidx-10*floor((plotidx-1)/10)-1)*12+3:...
+%                                (plotidx-10*floor((plotidx-1)/10)-1)*12+12);
+%     %    % d1 = designfilt('bandpassiir','FilterOrder',1, ...
+%     %          'CutoffFrequency1',.1,'CutoffFrequency2',4, ...
+%     %          'SampleRate',30,'DesignMethod','butter');
+%     %    % d1 = designfilt('bandpassfir','FilterOrder',1, ...
+%     %          %'HalfPowerFrequency',0.15,'DesignMethod','butter');
+%     d1 = designfilt('bandpassfir','FilterOrder',8, ...
+%         'CutoffFrequency1',0.5,'CutoffFrequency2',3, ...
+%         'SampleRate',30);
+%     yfilt = filtfilt(d1,dF(:,plotidx));
+%     
+%     plot(m.ftrig_shift,yfilt,'b');
+%     ylim([MdF-2*SdF MdF+2.5*SdF]);
+%         ylabel('\DeltaF/F_0'); 
+%         hold on;
+%     %     plot(m.ftrig_shift,dF(:,plotidx),'b');ylim([MdF-2*SdF MdF+2.5*SdF]); ylabel('\DeltaF/F_0');hold on;
+%     %     for plotline=2:size(m.time(m.shutter_timing>0),2)-1 % This is because we remove the first and last stims
+%     % for plotline=2:size(StimEff,2) % This is because we remove the first and last stims
+%     for idx1 = 1:size(patternTrials{plotidx},1)
+%         stimNum = patternTrials{plotidx}(idx1);
+%         if ~ismember(stimNum,m.excludedTrials) % just toss unwanted trials
+%             linetime = m.shonset_shift(stimNum); %use real stim num indexing.
+%             plot([linetime, linetime],[get(plots(plotidx),'ylim')],'--r')
 %         end
-%         
-%         for plotline=1:size(m.time(m.shutter_timing>0),2)
-%             linetime=m.time(m.shutter_timing>0);
-%             plot([linetime(plotline),linetime(plotline)],...
-%                         [get(gca,'ylim')],'--r')
-%             %     if plotline<size(m.time(m.shutter_timing>0),2)
-%             %         if StimEff(plotidx,plotline)==1
-%             %             rectangle('Position',[linetime(plotline) MdF-2*SdF 500 SdF/5],'EdgeColor','g','FaceColor','g')
-%             %         end
-%             %     end
-%         end
-end
-
-% Plotting the sniff measurements
-for sniffidx=1:TabNum
-    axes('parent',tab(sniffidx));
-    plots(plotidx+sniffidx)=subplot(10+1,12,10*12+3:10*12+12);
-    plot(m.time,m.sniff,'b');
-    ylim([min(m.sniff) max(m.sniff)]); 
-    ylabel('Sniff');
-    hold on;
-    for plotline=1:size(m.time(m.shutter_timing>0),2)
-        linetime=m.time(m.shutter_timing>0);
-        plot([linetime(plotline),linetime(plotline)],...
-                    [get(plots(plotidx+1),'ylim')],'--r')
-    end
-end
-
-% Make sure all the x axis limits are the same
-linkaxes([plots],'x');
-
-% Generate the slider in the plot
-sld = uicontrol('Style', 'slider','Units','normalized','Min',0,'Max',1,...
-    'SliderStep',[0.01 0.10],'Value',0,'Position',...
-    [0.5254    0.0500    0.3796    0.02],'Callback', {@plotxlim,plots,m}); 
+%     end
+%     
+% %         for plotline=1:size(m.time(m.shutter_timing>0),2)
+% %             linetime=m.time(m.shutter_timing>0);
+% %             plot([linetime(plotline),linetime(plotline)],...
+% %                         [get(plots(plotidx),'ylim')],'--r')
+% %             %     if plotline<size(m.time(m.shutter_timing>0),2)
+% %             %         if StimEff(plotidx,plotline)==1
+% %             %             rectangle('Position',[linetime(plotline) MdF-2*SdF 500 SdF/5],'EdgeColor','g','FaceColor','g')
+% %             %         end
+% %             %     end
+% %         end
+% %         
+% %         for plotline=1:size(m.time(m.shutter_timing>0),2)
+% %             linetime=m.time(m.shutter_timing>0);
+% %             plot([linetime(plotline),linetime(plotline)],...
+% %                         [get(gca,'ylim')],'--r')
+% %             %     if plotline<size(m.time(m.shutter_timing>0),2)
+% %             %         if StimEff(plotidx,plotline)==1
+% %             %             rectangle('Position',[linetime(plotline) MdF-2*SdF 500 SdF/5],'EdgeColor','g','FaceColor','g')
+% %             %         end
+% %             %     end
+% %         end
+% end
+% 
+% % Plotting the sniff measurements
+% for sniffidx=1:TabNum
+%     axes('parent',tab(sniffidx));
+%     plots(plotidx+sniffidx)=subplot(10+1,12,10*12+3:10*12+12);
+%     plot(m.time,m.sniff,'b');
+%     ylim([min(m.sniff) max(m.sniff)]); 
+%     ylabel('Sniff');
+%     hold on;
+%     for plotline=1:size(m.time(m.shutter_timing>0),2)
+%         linetime=m.time(m.shutter_timing>0);
+%         plot([linetime(plotline),linetime(plotline)],...
+%                     [get(plots(plotidx+1),'ylim')],'--r')
+%     end
+% end
+% 
+% % Make sure all the x axis limits are the same
+% linkaxes([plots],'x');
+% 
+% % Generate the slider in the plot
+% sld = uicontrol('Style', 'slider','Units','normalized','Min',0,'Max',1,...
+%     'SliderStep',[0.01 0.10],'Value',0,'Position',...
+%     [0.5254    0.0500    0.3796    0.02],'Callback', {@plotxlim,plots,m}); 
     
 
 %% plotting the difference between pre and post stimulation figures
