@@ -20,7 +20,7 @@ clc
 % VISUALIZATION. Make a seperate function. also useful for checking in the
 % slm software.
 %
-fpathPat=uigetdir('/gpfs/data/shohamlab/shared_data/jon_2p_data/','Please choose the folder containing patterns');
+fpathPat=uigetdir('C:\Users\bnste\Documents\scripts','Please choose the folder containing patterns');
 fnamesPat = dir(fullfile(fpathPat,'*.mat'));
 
 % Check number of holograms, set up variables
@@ -74,7 +74,7 @@ end
 % TODO: WTF, let's just have one function that reads everything in.
 
 [fnameH5, fpathH5]=uigetfile('*.h5',...
-    'Please choose the hdf5 file of the experiment','/gpfs/data/shohamlab/shared_data/jon_2p_data/');
+    'Please choose the hdf5 file of the experiment','C:\Users\bnste\Documents\scripts');
 % [fnameH5, fpathH5]=uigetfile('*.h5','Please choose the hdf5 file of the experiment');
 
 % Extract pharospower? 0 = no, 1 = yes. Don't set to 1 if you don't have
@@ -96,7 +96,7 @@ Pharospower=0;
 
 %% Checking how many images we have in all the relevant files
 [name,path]=uigetfile('*.tif',...
-    'Please choose the Tiff Stack files of this session','/gpfs/data/shohamlab/shared_data/jon_2p_data/');
+    'Please choose the Tiff Stack files of this session','C:\Users\bnste\Documents\scripts');
 
 [tiffInfo]=tiff_info(name,path,redchannel);
 
