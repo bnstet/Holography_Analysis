@@ -13,14 +13,14 @@ clc
 %% Setting the analysis parameters
 [StimLength,Omitpre,Omitpost,prefigs,postfigs,redchannel] = ...
     SetAnalysisParameters();
-%Omitpre=2;
+
 %% loading the pattern file
 
 % FIND A WAY TO ACCUMULATE THE COORDINATES ACROSS HOLOGRAMS FOR
 % VISUALIZATION. Make a seperate function. also useful for checking in the
 % slm software.
-%
-fpathPat=uigetdir('C:\Users\bnste\Documents\scripts','Please choose the folder containing patterns');
+
+fpathPat=uigetdir('C:\Users\bnste\Documents\scripts\jon_2p_data\','Please choose the folder containing patterns');
 fnamesPat = dir(fullfile(fpathPat,'*.mat'));
 
 % Check number of holograms, set up variables
@@ -31,6 +31,9 @@ SpotMat(:)={zeros(512)};
 spots.xcoordsAll = [];
 spots.ycoordsAll = [];
 spots.sizesAll = [];
+
+width = size(SpotMat{1},1);
+height = size(SpotMat{1},2);
 
 % Cycle through each hologram and extract the coordinates. Turn these into
 % indices for linearly defining stimulated pixels in images.
@@ -74,7 +77,7 @@ end
 % TODO: WTF, let's just have one function that reads everything in.
 
 [fnameH5, fpathH5]=uigetfile('*.h5',...
-    'Please choose the hdf5 file of the experiment','C:\Users\bnste\Documents\scripts');
+    'Please choose the hdf5 file of the experiment','C:\Users\bnste\Documents\scripts\jon_2p_data\');
 % [fnameH5, fpathH5]=uigetfile('*.h5','Please choose the hdf5 file of the experiment');
 
 % Extract pharospower? 0 = no, 1 = yes. Don't set to 1 if you don't have
@@ -96,7 +99,7 @@ Pharospower=0;
 
 %% Checking how many images we have in all the relevant files
 [name,path]=uigetfile('*.tif',...
-    'Please choose the Tiff Stack files of this session','C:\Users\bnste\Documents\scripts');
+    'Please choose the Tiff Stack files of this session','C:\Users\bnste\Documents\scripts\jon_2p_data\');
 
 [tiffInfo]=tiff_info(name,path,redchannel);
 
@@ -145,74 +148,71 @@ frameidx=frameidx(1:end-1); % remove the last onset
 
 %% Open file after file of this session and calculate the relevant parameters
 
-F = zeros(tiffInfo.totnumimages,spot_num);
-initialFrame=0; % This parameter will hold the frame number between the files
-fname=[path,name];
-filenum=1;minimum = 0;
-tic
-% for j = 1:numel(block_names)
-for idx = 1:length(tiffInfo.filelist)
-    
-    % Get path and file name (needed for legacy Stack2Figs)
-    path = tiffInfo.pathlist{idx}(1:end-length(tiffInfo.filelist(idx).name));
-    thisName = tiffInfo.filelist(idx).name;
-    
-    % Read in the tiff
-    [Stack,num_images_temp,fnameStack,fpathStack] = Stack2Figs(thisName,path,redchannel);
 
-    % Calculating the fluorescence signal from each frame for all cells
-    for frame=initialFrame+1:initialFrame+num_images_temp
-        
-        % Grab each frame and pull out the mean values from each spot
-        tempStack=Stack(:,:,frame-initialFrame);
-        F(frame,:)=cellfun(@(x) mean(tempStack(x)),Spotidx);
-        
-        % Store the minimum value of the whole measurement movie
-        if min(tempStack(:))<minimum
-            minimum = min(Stack(:)); 
-        end
-    end
-%     
-    
-%     % Onsets of stimulation in this stack of the whole movie
-%     frameidxtemp=frameidx((frameidx>initialFrame)&...
-%         (frameidx<initialFrame+num_images_temp))-initialFrame;
-%     
-%     % Initialize Diffidx
-%     Diffidx=find((frameidx>initialFrame)&(frameidx<initialFrame+num_images_temp));
-    
-    % Make the average Post - Pre image
-%     [ normDiff(1:width,1:height,Diffidx), Diff(1:width,1:height,Diffidx),PreStim(1:width,1:height,Diffidx),...
-%         PostStim(1:width,1:height,Diffidx)] = DiffAvgFigsLongMeasurements( m, Stack ,frameidxtemp ,prefigs ,postfigs,Omitpost );
-    
-
-%     tempnum=num2str(100000+str2num(fname(end-8:end-4))+1);
-%     fname(end-8:end-4)=tempnum(2:end);
-%     name(end-8:end-4)=tempnum(2:end);
-    filenum=filenum+1
-    initialFrame=frame;
+initialFrames = cumsum(tiffInfo.num_images) ; initialFrames = [(0);initialFrames];
+loopOutput = struct('F',{}, 'normDiff', {},'Diff', {},'PreStim',{}, 'PostStim', {},  'Diffidx',{});
+for i = 1:length(tiffInfo.filelist)
+   loopOutput(i).F = [] ;
 end
+
+fname=[path,name];
+tic
+parfor tiffIdx = 1:length(tiffInfo.filelist)
+    
+    disp(['Beginning processing on file ', num2str(tiffIdx),' : ', tiffInfo.filelist(tiffIdx).name]);
+    
+  [loopOutput(tiffIdx).F, loopOutput(tiffIdx).normDiff, loopOutput(tiffIdx).Diff, ...
+      loopOutput(tiffIdx).PreStim, loopOutput(tiffIdx).PostStim, loopOutput(tiffIdx).Diffidx,...
+       avgImg(:,:,tiffIdx), medianImg(:,:,tiffIdx),maxImg(:,:,tiffIdx), stdImg(:,:,tiffIdx)] = ...
+        HolographyDataLoop(tiffInfo,tiffIdx, frameidx, m,prefigs ,postfigs,Omitpost, redchannel, spot_num, Spotidx, SpotMat);
+    
+    disp(['Completed processing on file ', num2str(tiffIdx),' : ', tiffInfo.filelist(tiffIdx).name]);
+
+end
+
+% concatenate file results
+F = []; normDiff=[]; Diff=[]; PreStim = []; PostStim = []; Diffidx = [];
+for i = 1:length(loopOutput)
+    F = cat(1,F,loopOutput(i).F);
+    normDiff = cat(3,normDiff, loopOutput(i).normDiff);
+    Diff = cat(3,Diff, loopOutput(i).Diff);
+    PreStim = cat(3,PreStim, loopOutput(i).PreStim);
+    PostStim = cat(3,PostStim, loopOutput(i).PostStim);
+    Diffidx = cat(2, Diffidx, loopOutput(i).Diffidx);
+end
+
+
+% combine summary images
+avgImg = mean(avgImg,3);
+maxImg = max(maxImg,[],3);
+stdImg = sqrt( mean(stdImg.^2,3));
+
+
+disp('File loop complete');
 toc
 
 %% Calculating dF/F signal
-F=F-min(F(:)); % set the lowest value at zero
-F0=prctile(F,5,1);% We define F0 as the lowest 5% of the fluorescence signal over time.
+f0window = 10; % average over this many frames to reduce noise in baseline
+F0=prctile(movmean(F,f0window,1),5,1);% We define F0 as the lowest 5% of the (window-averaged) fluorescence signal over time.
 dF=(F-F0)./F0;
 
-%% Average image
-avgImg = mean(Stack,3);
-medianImg = median(Stack,3);
-maxImg = max(Stack,[],3);
-stdImg = std(single(Stack),0,3);
-
 %% Generating and plotting the dF average of all trials per stimulation spot
-PreStimFrames = 30; % the number of frames before stim to include in avg
-PostStimFrames = 60; % the number of frames after stim to include in avg 
-IntPre = 1;% # of frames before stim to sum for the calculation of the delta in dF before and after stim
-IntPost = 10;% # of frames after stim to sum for the calculation of the delta in dF before and after stim
 
-dFvec = stimtrigresponse( m, F ,PreStimFrames,PostStimFrames,...
-    Omitpre,Omitpost,patternTrials,frameidx);
+% square sidelength for calculating local stim average image (pixels)
+localSize = 75;
+smoothSize = 3;
+
+% dFvec = stimtrigresponse( m, F ,PreStimFrames,PostStimFrames,...
+%     Omitpre,Omitpost,patternTrials,frameidx);
+
+[dFvec, diffStimImages, diffStimLocalImages] = stimtrigresponse( m, dF ,PreStimFrames,PostStimFrames,...
+    Omitpre,Omitpost,patternTrials,frameidx, Diffidx, PreStim, PostStim, localSize, spots);
+
+localMeans = cellfun(@(x) imgaussfilt( mean(reshape([x{:}], localSize,localSize,[]),3), smoothSize), diffStimLocalImages, 'UniformOutput',false);
+totLocalMean = mean(reshape([localMeans{:}], localSize,localSize,[]),3);
+
+meanDiffStimImages = cellfun(@(x) imgaussfilt( mean(reshape([x{:}], width, height,[]),3),3), diffStimImages, 'UniformOutput',false);
+totMeanDiffStim = mean(reshape([meanDiffStimImages{:}], width,height,[]),3);
 
 %% Calculate stim success
 % RealStimVal=PreSTD;
@@ -233,7 +233,7 @@ end
 for plotidx2=1:size(dFvec,1)
     axes('parent',tab(ceil(plotidx2/10)));
     %plots2(plotidx2)=subplot(spot_num+1,5,(plotidx2-10*floor((plotidx2-1)/10)-1)*13+6);
-    plots2(plotidx2)=subplot(10+1,5,(plotidx2-10*floor((plotidx2-1)/10)-1)*5+1:(plotidx2-10*floor((plotidx2-1)/10)-1)*5+2);
+    plots2(plotidx2)=subplot(10+1,3,(plotidx2-10*floor((plotidx2-1)/10)-1)*3+1:(plotidx2-10*floor((plotidx2-1)/10)-1)*3+2);
     %plots2(plotidx2)=subplot(10,3,plotidx2);
     dFcell = [dFvec{plotidx2}{:}];
     dFavg(plotidx2,:)=mean([dFvec{plotidx2}{:}],2);
@@ -380,3 +380,31 @@ plot_spots(spots)
 % % save([path,'Analysis\',savename,'.mat'],'GoodStim','AmpMean','AmpSTD','StimTries','StimAmp','StimDeltaValue')
 % save([path,'Analysis\',savename,'.mat']);
 % toc
+
+
+%% open additional figure windows
+
+for i = 1:spot_num
+   figure;
+   imgtot=subplot(1,3,1);
+   tmpImg = stdImg;
+   x = spots.xcoordsAll(i); y = spots.ycoordsAll(i);
+   tmpImg(y-3:y+3, x-3:x+3)= max(max(stdImg));
+   imagesc(tmpImg);hold on; colormap(imgtot,'gray');title(['Stim spot ', num2str(i)]);
+   
+   imgDiffPlot = subplot(1,3,2);
+   imgDiff = meanDiffStimImages{i};
+   imagesc(imgDiff);hold on; colormap(imgDiffPlot);title(['Spot diff average: spot ', num2str(i)]);
+   colorbar;
+   
+   localDiffPlot = subplot(1,3,3);
+   localDiff = localMeans{i};
+   imagesc(localDiff);hold on; colormap(localDiffPlot);title('local stim image for this spot');
+   colorbar;
+end
+
+figure;
+imagesc(totLocalMean);
+colormap;
+colorbar;
+title('mean local response (all stim locations)');

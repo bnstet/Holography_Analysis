@@ -5,11 +5,11 @@ function [ normDiff,Diff ,PreStim,PostStim] = DiffAvgFigsLongMeasurements( m, St
 
 
 
-PreStim = zeros(size(Stack,1),size(Stack,2),size(frameidx,2)-2);
-PostStim = zeros(size(Stack,1),size(Stack,2),size(frameidx,2)-2);
-for stim=2:1:size(frameidx,2) % Changed to 2, in case not enough frames before first stim
-    PreStim(:,:,stim) = mean(Stack(:,:,frameidx(stim)-preframes:frameidx(stim)-2),3); % omit 1 frames before stim to reject artefacts
-    try % this is to catcj the cases where there are not enough frame after last stim in file
+PreStim = zeros(size(Stack,1),size(Stack,2),size(frameidx,2)-1);
+PostStim = zeros(size(Stack,1),size(Stack,2),size(frameidx,2)-1);
+for stim=1:1:size(frameidx,2) % Changed to 2, in case not enough frames before first stim
+    PreStim(:,:,stim) = mean(Stack(:,:,max(frameidx(stim)-preframes,1):frameidx(stim)-2),3); % omit 1 frames before stim to reject artefacts
+    try % this is to catch the cases where there are not enough frame after last stim in file
     PostStim(:,:,stim) = mean(Stack(:,:,frameidx(stim)+stimframes:frameidx(stim)+(stimframes+postframes)),3); % omit frames after stim to reject artefacts
     catch
         if frameidx(stim)+(stimframes+postframes)> size(Stack,3)
