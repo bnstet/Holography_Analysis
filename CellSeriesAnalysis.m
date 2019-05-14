@@ -148,9 +148,13 @@ frameidx=frameidx(1:end-1); % remove the last onset
 
 %% Open file after file of this session and calculate the relevant parameters
 
+filterSize = 5; % for DF/F calculations we will apply a square median filter with this width
+                   % NOTE: needs to be odd
+bkgrndPct = 5; % percentile to use for background determination
 
 initialFrames = cumsum(tiffInfo.num_images) ; initialFrames = [(0);initialFrames];
-loopOutput = struct('F',{}, 'normDiff', {},'Diff', {},'PreStim',{}, 'PostStim', {},  'Diffidx',{});
+loopOutput = struct('F',{}, 'normDiff', {},'Diff', {},'PreStim',{}, 'PostStim', {}, ...
+        'Diffidx',{}, 'bkgrndImg', {});
 for i = 1:length(tiffInfo.filelist)
    loopOutput(i).F = [] ;
 end
@@ -158,20 +162,20 @@ end
 fname=[path,name];
 tic
 parfor tiffIdx = 1:length(tiffInfo.filelist)
-    
     disp(['Beginning processing on file ', num2str(tiffIdx),' : ', tiffInfo.filelist(tiffIdx).name]);
     
   [loopOutput(tiffIdx).F, loopOutput(tiffIdx).normDiff, loopOutput(tiffIdx).Diff, ...
-      loopOutput(tiffIdx).PreStim, loopOutput(tiffIdx).PostStim, loopOutput(tiffIdx).Diffidx,...
-       avgImg(:,:,tiffIdx), medianImg(:,:,tiffIdx),maxImg(:,:,tiffIdx), stdImg(:,:,tiffIdx)] = ...
-        HolographyDataLoop(tiffInfo,tiffIdx, frameidx, m,prefigs ,postfigs,Omitpost, redchannel, spot_num, Spotidx, SpotMat);
+     loopOutput(tiffIdx).PreStim, loopOutput(tiffIdx).PostStim, loopOutput(tiffIdx).Diffidx,...
+     loopOutput(tiffIdx).bkgrndImg, avgImg(:,:,tiffIdx), medianImg(:,:,tiffIdx),maxImg(:,:,tiffIdx), stdImg(:,:,tiffIdx)] = ...
+        HolographyDataLoop(tiffInfo,tiffIdx, frameidx, m,prefigs ,postfigs,Omitpost, redchannel, spot_num, ... 
+            Spotidx, SpotMat, filterSize, bkgrndPct);
     
     disp(['Completed processing on file ', num2str(tiffIdx),' : ', tiffInfo.filelist(tiffIdx).name]);
 
 end
 
 % concatenate file results
-F = []; normDiff=[]; Diff=[]; PreStim = []; PostStim = []; Diffidx = [];
+F = []; normDiff=[]; Diff=[]; PreStim = []; PostStim = []; Diffidx = []; 
 for i = 1:length(loopOutput)
     F = cat(1,F,loopOutput(i).F);
     normDiff = cat(3,normDiff, loopOutput(i).normDiff);
@@ -182,17 +186,17 @@ for i = 1:length(loopOutput)
 end
 
 
-% combine summary images
+% combine summary images from individual files
 avgImg = mean(avgImg,3);
 maxImg = max(maxImg,[],3);
 stdImg = sqrt( mean(stdImg.^2,3));
-
+baselineImg = mean(reshape([loopOutput.bkgrndImg],width, height,[]),3);
 
 disp('File loop complete');
 toc
 
 %% Calculating dF/F signal
-f0window = 10; % average over this many frames to reduce noise in baseline
+f0window = 5; % average over this many frames to reduce noise in baseline
 F0=prctile(movmean(F,f0window,1),5,1);% We define F0 as the lowest 5% of the (window-averaged) fluorescence signal over time.
 dF=(F-F0)./F0;
 
@@ -202,10 +206,10 @@ dF=(F-F0)./F0;
 localSize = 75;
 smoothSize = 3;
 
-% dFvec = stimtrigresponse( m, F ,PreStimFrames,PostStimFrames,...
+% dFvec = stimtrigresponse( m, F ,prefigs,postfigs,...
 %     Omitpre,Omitpost,patternTrials,frameidx);
 
-[dFvec, diffStimImages, diffStimLocalImages] = stimtrigresponse( m, dF ,PreStimFrames,PostStimFrames,...
+[dFvec, diffStimImages, diffStimLocalImages] = stimtrigresponse( m, dF ,prefigs,postfigs,...
     Omitpre,Omitpost,patternTrials,frameidx, Diffidx, PreStim, PostStim, localSize, spots);
 
 localMeans = cellfun(@(x) imgaussfilt( mean(reshape([x{:}], localSize,localSize,[]),3), smoothSize), diffStimLocalImages, 'UniformOutput',false);
@@ -239,7 +243,7 @@ for plotidx2=1:size(dFvec,1)
     dFavg(plotidx2,:)=mean([dFvec{plotidx2}{:}],2);
     dFSEM(plotidx2,:)=std(dFcell,0,2)/sqrt(size([dFvec{plotidx2}{:}],2));
     %     ActualStims(plotidx2,1:size(dFvec,2)) = cellfun(@(x) dot(dFavg(plotidx2,:),x)./(norm(dFavg(plotidx2,:))*norm(x)),dFvec(plotidx2,:));
-    Tavg=-PreStimFrames+Omitpre:PostStimFrames+1-Omitpost; % the time for the average df/f plot
+    Tavg=-prefigs+Omitpre:postfigs+1-Omitpost; % the time for the average df/f plot
     plot(Tavg,dFavg(plotidx2,:),'r','Linewidth',1);
     hold on
     errorshade(Tavg,dFavg(plotidx2,:),dFSEM(plotidx2,:),dFSEM(plotidx2,:),'r','scalar');

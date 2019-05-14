@@ -1,10 +1,13 @@
-function [F, normDiff, Diff, PreStim, PostStim, Diffidx, avgImg, medianImg,maxImg, stdImg] = HolographyDataLoop(tiffInfo, tiffIdx, frameidx, m, prefigs, ...
-        postfigs,Omitpost, redchannel, spot_num, Spotidx, SpotMat)
+function [F, normDiff, Diff, PreStim, PostStim, Diffidx, bkgrndImg, avgImg, medianImg,maxImg, stdImg] = HolographyDataLoop(tiffInfo, tiffIdx, frameidx, m, prefigs, ...
+        postfigs,Omitpost, redchannel, spot_num, Spotidx, SpotMat, filterSize, bkgrndPct)
 
     % processing called on a single loop of the holographic video analysis
     % returns cell fluorescence traces + stim images corresponding to video
     % with index "tiffIdx" in tiffInfo
  
+    timeDownsample = 4; % downsample by this factor when calculating baseline
+    
+    
     width = size(SpotMat{1},1);
     height = size(SpotMat{1},2);
     
@@ -24,6 +27,12 @@ function [F, normDiff, Diff, PreStim, PostStim, Diffidx, avgImg, medianImg,maxIm
     medianImg = median(Stack,3);
     maxImg = max(Stack,[],3);
     stdImg = std(single(Stack),0,3);
+    
+    tic
+    % Make the background image based of a median-filtered stack
+    tInds = randsample(size(Stack,3), floor(size(Stack,3) / timeDownsample));
+    bkgrndImg = prctile(imgaussfilt3(Stack(:,:,tInds),filterSize/2, 'FilterSize', [filterSize,filterSize,1]), bkgrndPct, 3 );
+    toc
     
     F = zeros(num_images_temp,spot_num);
 
@@ -47,6 +56,9 @@ function [F, normDiff, Diff, PreStim, PostStim, Diffidx, avgImg, medianImg,maxIm
     % Make the average Post - Pre image
      [ normDiff(1:width,1:height,1:length(Diffidx)), Diff(1:width,1:height,1:length(Diffidx)),PreStim(1:width,1:height,1:length(Diffidx)),...
          PostStim(1:width,1:height,1:length(Diffidx))] = DiffAvgFigsLongMeasurements( m, Stack ,frameidxtemp ,prefigs ,postfigs,Omitpost);
+     
+     
+     
     
 end
 
