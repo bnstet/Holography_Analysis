@@ -11,6 +11,8 @@ function [F, normDiff, Diff, PreStim, PostStim, Diffidx, bkgrndImg, avgImg, medi
     width = size(SpotMat{1},1);
     height = size(SpotMat{1},2);
     
+    tic
+    
     % Get path and file name (needed for legacy Stack2Figs)
     path = tiffInfo.pathlist{tiffIdx}(1:end-length(tiffInfo.filelist(tiffIdx).name));
     thisName = tiffInfo.filelist(tiffIdx).name;
@@ -28,11 +30,9 @@ function [F, normDiff, Diff, PreStim, PostStim, Diffidx, bkgrndImg, avgImg, medi
     maxImg = max(Stack,[],3);
     stdImg = std(single(Stack),0,3);
     
-    tic
     % Make the background image based of a median-filtered stack
     tInds = randsample(size(Stack,3), floor(size(Stack,3) / timeDownsample));
     bkgrndImg = prctile(imgaussfilt3(Stack(:,:,tInds),filterSize/2, 'FilterSize', [filterSize,filterSize,1]), bkgrndPct, 3 );
-    toc
     
     F = zeros(num_images_temp,spot_num);
 
@@ -58,7 +58,7 @@ function [F, normDiff, Diff, PreStim, PostStim, Diffidx, bkgrndImg, avgImg, medi
          PostStim(1:width,1:height,1:length(Diffidx))] = DiffAvgFigsLongMeasurements( m, Stack ,frameidxtemp ,prefigs ,postfigs,Omitpost);
      
      
-     
+toc
     
 end
 
