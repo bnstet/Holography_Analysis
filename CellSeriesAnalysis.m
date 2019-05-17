@@ -10,13 +10,17 @@
 %tic
 %% Setting the analysis parameters
 settingsDir = 'C:\Users\bnste\Documents\scripts\Holography_Analysis'; 
-loadSettings = 1;
+loadSettings = 0;
 if ~loadSettings
     [StimLength,Omitpre,Omitpost,prefigs,postfigs,red_channel] = ...
         SetAnalysisParameters(settingsDir);
 else
     load([settingsDir,'/Analysis_Parameters.mat']);
 end
+
+% use 'trial' for faster per-trial baselines, and 'global' for slower
+% percentile baseline images
+baselinetype = 'trial';
 
 %% loading the pattern file
 
@@ -186,7 +190,7 @@ parfor tiffIdx = 1:length(tiffInfo.filelist)
      loopOutput(tiffIdx).PreStim, loopOutput(tiffIdx).PostStim, loopOutput(tiffIdx).Diffidx,...
      loopOutput(tiffIdx).bkgrndImg, avgImg(:,:,tiffIdx), medianImg(:,:,tiffIdx),maxImg(:,:,tiffIdx), stdImg(:,:,tiffIdx)] = ...
         HolographyDataLoop(tiffInfo,tiffIdx, frameidx, m,prefigs ,postfigs,Omitpost, red_channel, spot_num, ... 
-            Spotidx, SpotMat, filterSize, bkgrndPct);
+            Spotidx, SpotMat, baselinetype,filterSize, bkgrndPct);
     
     disp(['Completed processing on file ', num2str(tiffIdx),' : ', tiffInfo.filelist(tiffIdx).name]);
 
@@ -204,6 +208,7 @@ for i = 1:length(loopOutput)
 end
 
 
+
 % combine summary images from individual files
 avgImg = mean(avgImg,3);
 maxImg = max(maxImg,[],3);
@@ -213,32 +218,35 @@ baselineImg = mean(reshape([loopOutput.bkgrndImg],width, height,[]),3);
 disp('File loop complete');
 toc
 
+
+clear loopOutput;
+
 %% Calculating dF/F signal
 f0window = 5; % average over this many frames to reduce noise in baseline
 F0=prctile(movmean(F,f0window,1),5,1);% We define F0 as the lowest 5% of the (window-averaged) fluorescence signal over time.
+minF = min(F(:));
+F = F - minF;
 dF=(F-F0)./F0;
-dFSmooth = movmean(dF,f0window,1);
+
 
 %% Generating and plotting the dF average of all trials per stimulation spot
 
 % square sidelength for calculating local stim average image (pixels)
 localSize = 75;
-smoothSize = 3;
 
 
+[dFFvec, dFvec, diffStimImages, diffStimLocalImages, localBaselineImages, stimFrames] = stimtrigresponse( m, F,dF ,prefigs,postfigs,...
+    Omitpre,Omitpost,patternTrialsValid,frameidx, Diffidx, PreStim, PostStim, localSize, spots, baselineImg, baselinetype, F0, filterSize);
 
-[dFFvec, dFvec, diffStimImages, diffStimLocalImages, localBaselineImages] = stimtrigresponse( m, F,dF ,prefigs,postfigs,...
-    Omitpre,Omitpost,patternTrialsValid,frameidx, Diffidx, PreStim, PostStim, localSize, spots, baselineImg, 'trial', F0);
-
-localMeans = cellfun(@(x) imgaussfilt( mean(reshape([x{:}], localSize,localSize,[]),3), smoothSize), diffStimLocalImages, 'UniformOutput',false);
-totLocalMean = mean(reshape([localMeans{:}], localSize,localSize,[]),3);
-dffLocalMeans = cellfun( @(x,y) x ./ y, localMeans, localBaselineImages, 'UniformOutput', false);
+%totLocalMean = mean(reshape([localMeans{:}], localSize,localSize,[]),3);
+%dffLocalMeans = cellfun( @(x,y) x ./ y, localMeans, localBaselineImages, 'UniformOutput', false);
+dffLocalMeans = cellfun(@(x)  mean(reshape([x{:}], localSize,localSize,[]),3), diffStimLocalImages, 'UniformOutput',false);
 totDffLocalMean = mean(reshape([dffLocalMeans{:}], localSize,localSize,[]),3);
 
-meanDiffStimImages = cellfun(@(x) imgaussfilt( mean(reshape([x{:}], width, height,[]),3),smoothSize), diffStimImages, 'UniformOutput',false);
-totMeanDiffStimImage = mean(reshape([meanDiffStimImages{:}], width,height,[]),3);
 
-dffStimChangeImages = cellfun( @(x) x ./ baselineImg , meanDiffStimImages, 'UniformOutput', false);
+%totMeanDiffStimImage = mean(reshape([meanDiffStimImages{:}], width,height,[]),3);
+%dffStimChangeImages = cellfun( @(x) x ./ baselineImg , meanDiffStimImages, 'UniformOutput', false);
+dffStimChangeImages = cellfun(@(x)  mean(reshape([x{:}], width, height,[]),3), diffStimImages, 'UniformOutput',false);
 totDffStimChangeImage = mean(reshape([dffStimChangeImages{:}], width,height,[]),3);
 
 %% Calculate stim success
@@ -262,15 +270,15 @@ for plotidx2=1:size(dFFvec,1)
     %plots2(plotidx2)=subplot(spot_num+1,5,(plotidx2-10*floor((plotidx2-1)/10)-1)*13+6);
     plots2(plotidx2)=subplot(10+1,3,(plotidx2-10*floor((plotidx2-1)/10)-1)*3+1:(plotidx2-10*floor((plotidx2-1)/10)-1)*3+2);
     %plots2(plotidx2)=subplot(10,3,plotidx2);
-    dFcell = [dFFvec{plotidx2}{:}];
-    dFavg{plotidx2}=mean([dFFvec{plotidx2}{:}],2);
-    dFSEM{plotidx2}=std(dFcell,0,2)/sqrt(size([dFFvec{plotidx2}{:}],2));
+    dFFcell = [dFFvec{plotidx2}{:}];
+    dFFavg{plotidx2}=mean([dFFvec{plotidx2}{:}],2);
+    dFFSEM{plotidx2}=std(dFFcell,0,2)/sqrt(size([dFFvec{plotidx2}{:}],2));
     %     ActualStims(plotidx2,1:size(dFFvec,2)) = cellfun(@(x) dot(dFavg(plotidx2,:),x)./(norm(dFavg(plotidx2,:))*norm(x)),dFFvec(plotidx2,:));
     Tavg=-prefigs+Omitpre:postfigs+1-Omitpost; % the time for the average df/f plot
-    plot(Tavg,dFavg{plotidx2},'r','Linewidth',1);
+    plot(Tavg,dFFavg{plotidx2},'r','Linewidth',1);
     hold on
-    errorshade(Tavg,dFavg{plotidx2},dFSEM{plotidx2},dFSEM{plotidx2},'r','scalar');
-    ylim([mean(dFavg{plotidx2})-3*std(dFavg{plotidx2}) mean(dFavg{plotidx2})+3*std(dFavg{plotidx2})])
+    errorshade(Tavg,dFFavg{plotidx2},dFFSEM{plotidx2},dFFSEM{plotidx2},'r','scalar');
+    ylim([mean(dFFavg{plotidx2})-3*std(dFFavg{plotidx2}) mean(dFFavg{plotidx2})+3*std(dFFavg{plotidx2})])
     xlim([Tavg(1)-1 Tavg(end)+1]);
     
     %     GoodStim(plotidx2)=sum(StimEff(plotidx2,:));
@@ -305,16 +313,16 @@ plot_spots(spots)
 hold off
 
 stimTime = find(Tavg==0);
-avgWindow = [dFavg{:}];
+avgWindow = [dFFavg{:}];
 avgWindow = avgWindow(stimTime+1:stimTime+11,:)';
-dFint = mean(avgWindow,2);
+dFFint = mean(avgWindow,2);
 for i = 1:size(SpotMat)
     mask_array(:,:,i) = SpotMat{i};
 end
 responders_idx = 1:size(SpotMat);
 
 resp_ax = subplot(2,12,14:16);
-response_map = Response_Map(dFint,responders_idx,mask_array);
+response_map = Response_Map(dFFint,responders_idx,mask_array);
 imagesc(response_map)
 colormap(resp_ax,'hot')
 % caxis([.995 max(unique(response_map))])
@@ -336,7 +344,7 @@ plot_spots(spots)
 
 %% open additional figure windows
 
-clims = [-.25,.25];
+clims = [-.20,.20]; % colorbar limits for df/F0
 localtickwidth = 10;
 localticklabels = [-fliplr(0:localtickwidth:ceil(localSize/2)), localtickwidth:localtickwidth:ceil(localSize/2) ];
 localticks = linspace(1, localSize, numel(localticklabels));
@@ -383,14 +391,13 @@ newtab = uitab(tabgp,'Title','All Stims');
 axes('parent',newtab)
 
 imgDiffPlot = subplot(2,2,1);
-imgDiff = mean(reshape([dffStimChangeImages{:}], height, width, spot_num),3);
+imgDiff = totDffStimChangeImage;
 imagesc(imgDiff);hold on; axis on; axis equal; axis tight; colormap(imgDiffPlot); caxis(clims);
 title('global \DeltaF/F_0 stim average: all spots ');
 colorbar; hold off
 
 localImgDiffPlot = subplot(2,2,2);
 imagesc(totDffLocalMean);hold on;  axis equal; axis tight; colormap(localImgDiffPlot); caxis(clims);
-title(['global \DeltaF/F_0 stim average: spot ', num2str(i)]);
 colorbar; 
 title('mean local response (all stim locations)');
 set(gca, 'XTick', localticks, 'XTickLabel', localticklabels)

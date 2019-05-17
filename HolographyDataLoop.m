@@ -1,5 +1,5 @@
 function [F, normDiff, Diff, PreStim, PostStim, Diffidx, bkgrndImg, avgImg, medianImg,maxImg, stdImg] = HolographyDataLoop(tiffInfo, tiffIdx, frameidx, m, prefigs, ...
-        postfigs,Omitpost, redchannel, spot_num, Spotidx, SpotMat, filterSize, bkgrndPct)
+        postfigs,Omitpost, redchannel, spot_num, Spotidx, SpotMat, baselinetype ,filterSize, bkgrndPct)
 
     % processing called on a single loop of the holographic video analysis
     % returns cell fluorescence traces + stim images corresponding to video
@@ -30,10 +30,16 @@ function [F, normDiff, Diff, PreStim, PostStim, Diffidx, bkgrndImg, avgImg, medi
     maxImg = max(Stack,[],3);
     stdImg = std(single(Stack),0,3);
     
-    % Make the background image based of a median-filtered stack
-    tInds = randsample(size(Stack,3), floor(size(Stack,3) / timeDownsample));
-    bkgrndImg = prctile(imgaussfilt3(Stack(:,:,tInds),filterSize/2, 'FilterSize', [filterSize,filterSize,1]), bkgrndPct, 3 );
-    
+    % Make the background image based off of a partially-filtered stack
+    if strcmp(baselinetype,'trial')
+        bkgrndImg = mean(Stack,3);
+    elseif strcmp(baselinetype,'global')
+        tInds = randsample(size(Stack,3), floor(size(Stack,3) / timeDownsample));
+        bkgrndImg = prctile(imgaussfilt3(Stack(:,:,tInds),filterSize/2, 'FilterSize', [filterSize,filterSize,1]), bkgrndPct, 3 );
+    else
+        error('baselinetype must be trial or global'); 
+    end
+        
     F = zeros(num_images_temp,spot_num);
 
     % Calculating the fluorescence signal from each frame for all cells
