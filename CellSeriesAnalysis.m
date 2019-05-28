@@ -20,7 +20,7 @@ end
 
 % use 'trial' for faster per-trial baselines, and 'global' for slower
 % percentile baseline images
-baselinetype = 'trial';
+baselinetype = 'global';
 
 %% loading the pattern file
 
@@ -134,7 +134,9 @@ m.shutter_timing(nonzeros(double(m.shonset_shift).*double(m.shonset_shift>0)))=1
 % Find closest frame to trigger onset
 onsets=find(m.shutter_timing==1);
 diffs=min(abs(m.ftrig_shift-find(m.shutter_timing==1)));
-for idx1 = 1:size(nonzeros(m.shonset_shift>0),1)
+nbad = m.numTrials - size(nonzeros(m.shonset_shift>0),1);
+
+for idx1 = 1:size(diffs,1)
     frameidx(idx1)=find(abs(m.ftrig_shift-onsets(idx1))==diffs(idx1),1); % This is the closest frame to the shutter onset
 end
 
@@ -164,7 +166,7 @@ end
 %create modified patternTrials with only included trial indices
 for cellIdx = 1:length(patternTrials)
     cellFrameIdx = patternTrials{cellIdx};
-    patternTrialsValid{cellIdx} = cellFrameIdx(ismember(cellFrameIdx, m.includedTrials));
+    patternTrialsValid{cellIdx} = cellFrameIdx(ismember(cellFrameIdx, m.includedTrials)) - nbad ;
 end
 
 
@@ -225,7 +227,6 @@ clear loopOutput;
 f0window = 5; % average over this many frames to reduce noise in baseline
 F0=prctile(movmean(F,f0window,1),5,1);% We define F0 as the lowest 5% of the (window-averaged) fluorescence signal over time.
 minF = min(F(:));
-F = F - minF;
 dF=(F-F0)./F0;
 
 
@@ -233,7 +234,6 @@ dF=(F-F0)./F0;
 
 % square sidelength for calculating local stim average image (pixels)
 localSize = 75;
-
 
 [dFFvec, dFvec, diffStimImages, diffStimLocalImages, localBaselineImages, stimFrames] = stimtrigresponse( m, F,dF ,prefigs,postfigs,...
     Omitpre,Omitpost,patternTrialsValid,frameidx, Diffidx, PreStim, PostStim, localSize, spots, baselineImg, baselinetype, F0, filterSize);
@@ -344,7 +344,7 @@ plot_spots(spots)
 
 %% open additional figure windows
 
-clims = [-.20,.20]; % colorbar limits for df/F0
+clims = [-.12,.12]; % colorbar limits for df/F0
 localtickwidth = 10;
 localticklabels = [-fliplr(0:localtickwidth:ceil(localSize/2)), localtickwidth:localtickwidth:ceil(localSize/2) ];
 localticks = linspace(1, localSize, numel(localticklabels));
