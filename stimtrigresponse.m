@@ -1,9 +1,11 @@
-function [dFFvec, dFvec , diffStimImages, diffStimLocalImages, localBaselineImages, stimFrames] = stimtrigresponse(m,F,dF,PreStimFrames,PostStimFrames,Omitpre,...
+function [dFFvec, dFvec , diffStimImages, diffStimLocalImages, localBaselineImages, stimFrames] = stimtrigresponse(m,F,dF,mode,PreStimFrames,PostStimFrames,Omitpre,...
                                            Omitpost,patternTrialsValid,frameidx, Diffidx, ...
-                                           PreStim, PostStim, localSize, spots, baselineImg, baselinetype, F0, smoothSize)
+                                           PreStim, PostStim, localSize, spots, baselineImg, baselinetype, F0, smoothSize,...
+                                           preCalcPeriod, postCalcPeriod)
 %stimtrigresponse Get the stimulus triggered response for each cell. 
 %   Compute dF/F0 for each cell's activity centered on stimulus times.
 % 'baselinetype': 'trial' or 'global'
+% mode: 'from_F' or 'from_dF'
 halfsize = floor(localSize/2);
 
 Ft0 = [];
@@ -21,11 +23,18 @@ for cellNum = 1:numCells
         if  ~isempty(find(stimNum==Diffidx, 1)) % just toss unwanted trials
         stimFrame = frameidx(stimNum);
         stimFrames{cellNum}(end+1)=stimFrame;
+        
         preWindow = [max(1,stimFrame-PreStimFrames), max(1,stimFrame - Omitpre)];
+        preWindowCalc = [max(1,stimFrame-Omitpre-preCalcPeriod), max(1,stimFrame - Omitpre)];
         postWindow = [min(size(F,1),stimFrame+Omitpost),min(size(F,1),stimFrame+PostStimFrames)];
-        Ft0=mean(F(preWindow(1):preWindow(2),cellNum));% Calculate local f0 for each stimulus
+        postWindowCalc = [min(size(F,1),stimFrame+Omitpost),min(size(F,1),stimFrame+Omitpost+postCalcPeriod)];
+        
+        
+        Ft0=mean(F(preWindowCalc(1):preWindowCalc(2),cellNum));% Calculate local f0 for each stimulus
+        
         Fvec{cellNum}{idx1}=[F(preWindow(1):preWindow(2),cellNum); ...
             F(postWindow(1):postWindow(2),cellNum)]; % The signal 1 sec before and up to 2 sec after the shutter onset
+        
         dFvec{cellNum}{idx1}=(Fvec{cellNum}{idx1}-Ft0);
         if strcmp(baselinetype,'trial')
             dFFvec{cellNum}{idx1} = dFvec{cellNum}{idx1}./ Ft0;
@@ -35,6 +44,12 @@ for cellNum = 1:numCells
             diffStimImages{cellNum}{idx1} = imgaussfilt(PostStim(:,:,stimNum) - PreStim(:,:,stimNum), smoothSize)./ baselineImg;
         else
             error('baselinetype must be trial or global');
+        end
+        
+        if strcmp(mode, 'from_dF')
+            premean=mean(dF(preWindowCalc(1):preWindowCalc(2),cellNum));
+            dFFvec{cellNum}{idx1} = [dF(preWindow(1):preWindow(2),cellNum); ...
+                            dF(postWindow(1):postWindow(2),cellNum)] - premean;
         end
         
         % fill in diffStimImages

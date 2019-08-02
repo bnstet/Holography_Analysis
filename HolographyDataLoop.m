@@ -1,5 +1,5 @@
 function [F, normDiff, Diff, PreStim, PostStim, Diffidx, bkgrndImg, avgImg, medianImg,maxImg, stdImg] = HolographyDataLoop(tiffInfo, tiffIdx, frameidx, m, prefigs, ...
-        postfigs,Omitpost, redchannel, spot_num, Spotidx, SpotMat, baselinetype ,filterSize, bkgrndPct)
+        postfigs,Omitpost, redchannel, spot_num, Spotidx, SpotMat, baselinetype ,filterSize, bkgrndPct, preCalcPeriod,postCalcPeriod)
 
     % processing called on a single loop of the holographic video analysis
     % returns cell fluorescence traces + stim images corresponding to video
@@ -61,7 +61,7 @@ function [F, normDiff, Diff, PreStim, PostStim, Diffidx, bkgrndImg, avgImg, medi
     
     % Make the average Post - Pre image
      [ normDiff(1:width,1:height,1:length(Diffidx)), Diff(1:width,1:height,1:length(Diffidx)),PreStim(1:width,1:height,1:length(Diffidx)),...
-         PostStim(1:width,1:height,1:length(Diffidx))] = DiffAvgFigsLongMeasurements( m, Stack ,frameidxtemp ,prefigs ,postfigs,Omitpost);
+         PostStim(1:width,1:height,1:length(Diffidx))] = DiffAvgFigsLongMeasurements( m, Stack ,frameidxtemp ,prefigs ,postfigs,Omitpost, preCalcPeriod, postCalcPeriod);
      
      
 toc
