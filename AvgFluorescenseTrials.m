@@ -18,15 +18,15 @@ for idx2 = 1:size(F,2)
         
 %         dFvec{idx3,idx2}=[F(frameidx(idx3)-PreStimFrames:frameidx(idx3)-Omitpre,idx2);F(frameidx(idx3)+Omitpost:frameidx(idx3)+PostStimFrames,idx2)]; % The signal 1 sec before and up to 2 sec after the shutter onset
         if Ft0indicator==1
-            Ft0(idx3,idx2)=mean(F(frameidx(idx3)-PreStimFrames:frameidx(idx3)-Omitpre,idx2));% Calculate local f0 for each stimulus
+            Ft0(idx3,idx2)=mean(F(max(frameidx(idx3)-PreStimFrames,1):frameidx(idx3)-Omitpre,idx2));% Calculate local f0 for each stimulus
             %Ft0(idx3,idx2)= dF(frameidx(idx3)-Omitpre,idx2);% local f0 as last pixel before stim (optional)
-            Fvec{idx3,idx2}=[F(frameidx(idx3)-PreStimFrames:frameidx(idx3)-Omitpre,idx2);F(frameidx(idx3)+Omitpost:frameidx(idx3)+PostStimFrames,idx2)]; % The signal 1 sec before and up to 2 sec after the shutter onset
+            Fvec{idx3,idx2}=[F(max(frameidx(idx3)-PreStimFrames,1):frameidx(idx3)-Omitpre,idx2);F(frameidx(idx3)+Omitpost:frameidx(idx3)+PostStimFrames,idx2)]; % The signal 1 sec before and up to 2 sec after the shutter onset
             dFvec{idx3,idx2}=(Fvec{idx3,idx2}-Ft0(idx3,idx2))./Ft0(idx3,idx2); % Calculate (F-Ft0)/Ft0
             %dFvec{idx3,idx2}=(Fvec{idx3,idx2}-Ft0(idx3,idx2))./F0(idx2); % Calculate (F-Ft0)/F0.
-            PreStimValue=mean(dFvec{idx3,idx2}(PreStimFrames-Omitpre-IntPre+1:PreStimFrames-Omitpre));% average of PreStimFrames samples before stim
-            PostStimValue=mean(dFvec{idx3,idx2}(PreStimFrames-Omitpre+1:PreStimFrames-Omitpre+1+IntPost));% average of 15 samples after the stim
+            PreStimValue=mean(dFvec{idx3,idx2}(max(PreStimFrames-Omitpre-IntPre+1,1):PreStimFrames-Omitpre));% average of PreStimFrames samples before stim
+            PostStimValue=mean(dFvec{idx3,idx2}(max(PreStimFrames-Omitpre+1,1):PreStimFrames-Omitpre+1+IntPost));% average of 15 samples after the stim
             StimDeltaValue(idx3,idx2)=PostStimValue-PreStimValue;
-            PreSTD(idx3,idx2)=std(dFvec{idx3,idx2}(1:PreStimFrames-Omitpre));% std of PreStimFrames samples before stim
+            PreSTD(idx3,idx2)=std(dFvec{idx3,idx2}(1:max(PreStimFrames-Omitpre,1)));% std of PreStimFrames samples before stim
         end
     end
     
