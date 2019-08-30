@@ -20,7 +20,8 @@ end
 
 % use 'trial' for faster per-trial baselines, and 'global' for slower
 % percentile baseline images
-baselinetype = 'global';
+baselinetype = 'trial';
+
 
 %% loading the pattern file
 
