@@ -1,3 +1,6 @@
+function CellSeriesAnalysis(loadSettings, fpathPat, h5Pat, stackPat, saveDataPat,figPat, cmFile)
+
+
 % CellSeriesAnalysis.m
 %   This script plots the responses of neurons targeted individually in the
 %   Cell Series experiment. You will need to provide a folder containing
@@ -8,9 +11,32 @@
 
 
 %tic
+%%
+% if nargin < 1
+%     loadSettings = 0;
+% end
+% if nargin < 2
+%     fpathPat = '';
+% end
+% if nargin < 3
+%     h5Pat = '';
+% end
+% if nargin < 4
+%     stackPat = '';
+% end
+% if nargin < 5
+%     saveDataPat = 'save_data.mat'
+% end
+% if nargin < 6
+%     figPat = 'test.fig';
+% end
+% if nargin < 7
+%     cmFile='';
+% end
+
 %% Setting the analysis parameters
-settingsDir = 'C:\Users\bnste\Documents\scripts\Holography_Analysis'; 
-loadSettings = 0;
+%settingsDir = 'C:\Users\bnste\Documents\scripts\Holography_Analysis'; 
+settingsDir = '/gpfs/home/stetlb01/Holography_Analysis';
 if ~loadSettings
     [StimLength,Omitpre,Omitpost,prefigs,postfigs,red_channel] = ...
         SetAnalysisParameters(settingsDir);
@@ -21,6 +47,12 @@ end
 % use 'trial' for faster per-trial baselines, and 'global' for slower
 % percentile baseline images
 baselinetype = 'trial';
+preCalcPeriod=10; % frames to avg pre trial for dFFavg (and dFF pretrial offset)
+postCalcPeriod=3; % frames to avg post trial for dFFavg
+dFFmode = 'from_F';
+filterSize = 5; % for DF/F calculations we will apply a square median filter with this width
+                   % NOTE: needs to be odd
+bkgrndPct = 5; % percentile to use for background determination
 
 
 %% loading the pattern file
@@ -29,7 +61,9 @@ baselinetype = 'trial';
 % VISUALIZATION. Make a seperate function. also useful for checking in the
 % slm software.
 
-fpathPat=uigetdir('C:\Users\bnste\Documents\scripts\jon_2p_data\','Please choose the folder containing patterns');
+if length(fpathPat)==0
+    fpathPat=uigetdir('C:\Users\bnste\Documents\scripts\jon_2p_data\','Please choose the folder containing patterns');
+end
 fnamesPat = dir(fullfile(fpathPat,'*.mat'));
 
 % Check number of holograms, set up variables
@@ -84,9 +118,14 @@ for idx1 = 1:spot_num
 end
 %% loading the H5 file
 
-[fnameH5, fpathH5]=uigetfile('*.h5',...
-    'Please choose the hdf5 file of the experiment','C:\Users\bnste\Documents\scripts\jon_2p_data\');
-
+if length(h5Pat)==0
+    [fnameH5, fpathH5]=uigetfile('*.h5',...
+        'Please choose the hdf5 file of the experiment','C:\Users\bnste\Documents\scripts\jon_2p_data\');
+else
+    [fpathH5, fnameH5, ext] = fileparts(h5Pat);
+    fnameH5 = strcat(fnameH5, ext);
+end
+    
 % Extract pharospower? 0 = no, 1 = yes. Don't set to 1 if you don't have
 % this field in the data. TODO: check for this instead of toggling.
 Pharospower=0;
@@ -105,9 +144,14 @@ Pharospower=0;
     m.sniff_samples] = HDF5Eventsreader( fpathH5,fnameH5);
 
 %% Checking how many images we have in all the relevant files
-[name,path]=uigetfile('*.tif',...
-    'Please choose the Tiff Stack files of this session','C:\Users\bnste\Documents\scripts\jon_2p_data\');
-
+if length(stackPat)==0
+    [name,path]=uigetfile('*.tif',...
+        'Please choose the Tiff Stack files of this session','C:\Users\bnste\Documents\scripts\jon_2p_data\');
+else
+    [path, name, ext] = fileparts(stackPat);
+    name = strcat(name, ext);
+end
+    
 [tiffInfo]=tiff_info(name,path,red_channel);
 
 %% Checking to see that we are not missing data and shift the timing of sniff and figures
@@ -135,6 +179,7 @@ m.shutter_timing(nonzeros(double(m.shonset_shift).*double(m.shonset_shift>0)))=1
 % Find closest frame to trigger onset
 onsets=find(m.shutter_timing==1);
 diffs=min(abs(m.ftrig_shift-find(m.shutter_timing==1)));
+diffs = diffs(:);
 nbad = m.numTrials - size(nonzeros(m.shonset_shift>0),1);
 
 for idx1 = 1:size(diffs,1)
@@ -173,9 +218,7 @@ end
 
 %% Open file after file of this session and calculate the relevant parameters
 
-filterSize = 3; % for DF/F calculations we will apply a square median filter with this width
-                   % NOTE: needs to be odd
-bkgrndPct = 5; % percentile to use for background determination
+
 
 initialFrames = cumsum(tiffInfo.num_images) ; initialFrames = [(0);initialFrames];
 loopOutput = struct('F',{}, 'normDiff', {},'Diff', {},'PreStim',{}, 'PostStim', {}, ...
@@ -193,7 +236,7 @@ parfor tiffIdx = 1:length(tiffInfo.filelist)
      loopOutput(tiffIdx).PreStim, loopOutput(tiffIdx).PostStim, loopOutput(tiffIdx).Diffidx,...
      loopOutput(tiffIdx).bkgrndImg, avgImg(:,:,tiffIdx), medianImg(:,:,tiffIdx),maxImg(:,:,tiffIdx), stdImg(:,:,tiffIdx)] = ...
         HolographyDataLoop(tiffInfo,tiffIdx, frameidx, m,prefigs ,postfigs,Omitpost, red_channel, spot_num, ... 
-            Spotidx, SpotMat, baselinetype,filterSize, bkgrndPct);
+            Spotidx, SpotMat, baselinetype,filterSize, bkgrndPct, preCalcPeriod, postCalcPeriod);
     
     disp(['Completed processing on file ', num2str(tiffIdx),' : ', tiffInfo.filelist(tiffIdx).name]);
 
@@ -226,9 +269,17 @@ clear loopOutput;
 
 %% Calculating dF/F signal
 f0window = 5; % average over this many frames to reduce noise in baseline
-F0=prctile(movmean(F,f0window,1),5,1);% We define F0 as the lowest 5% of the (window-averaged) fluorescence signal over time.
-minF = min(F(:));
-dF=(F-F0)./F0;
+d1 = designfilt('bandpassfir','FilterOrder',8, ...
+        'CutoffFrequency1',0.1,'CutoffFrequency2',10, ...
+        'SampleRate',30);
+Ffilt = zeros(size(F));
+for i=1:spot_num    
+    Ffilt(:,i) = squeeze(filtfilt(d1,F(:,i)));
+end
+F0= prctile(movmean(F,f0window,1),5,1);
+F0filt=prctile(movmean(Ffilt,f0window,1),5,1);% We define F0 as the lowest 5% of the (window-averaged) fluorescence signal over time.
+%dF=(F - F0)./F0;
+dF=(Ffilt-F0filt)./F0filt;
 
 
 %% Generating and plotting the dF average of all trials per stimulation spot
@@ -236,18 +287,19 @@ dF=(F-F0)./F0;
 % square sidelength for calculating local stim average image (pixels)
 localSize = 75;
 
-[dFFvec, dFvec, diffStimImages, diffStimLocalImages, localBaselineImages, stimFrames] = stimtrigresponse( m, F,dF ,prefigs,postfigs,...
-    Omitpre,Omitpost,patternTrialsValid,frameidx, Diffidx, PreStim, PostStim, localSize, spots, baselineImg, baselinetype, F0, filterSize);
+[dFFvec, dFvec, diffStimImages, diffStimLocalImages, localBaselineImages, stimFrames] = stimtrigresponse( m, F,dF , dFFmode, prefigs,postfigs,...
+    Omitpre,Omitpost,patternTrialsValid,frameidx, Diffidx, PreStim, PostStim, localSize, spots, baselineImg, baselinetype, F0, filterSize,...
+    preCalcPeriod, postCalcPeriod);
 
 %totLocalMean = mean(reshape([localMeans{:}], localSize,localSize,[]),3);
 %dffLocalMeans = cellfun( @(x,y) x ./ y, localMeans, localBaselineImages, 'UniformOutput', false);
-dffLocalMeans = cellfun(@(x)  mean(reshape([x{:}], localSize,localSize,[]),3), diffStimLocalImages, 'UniformOutput',false);
+dffLocalMeans = cellfun(@(x)  nanmean(reshape([x{:}], localSize,localSize,[]),3), diffStimLocalImages, 'UniformOutput',false);
 totDffLocalMean = mean(reshape([dffLocalMeans{:}], localSize,localSize,[]),3);
 
 
 %totMeanDiffStimImage = mean(reshape([meanDiffStimImages{:}], width,height,[]),3);
 %dffStimChangeImages = cellfun( @(x) x ./ baselineImg , meanDiffStimImages, 'UniformOutput', false);
-dffStimChangeImages = cellfun(@(x)  mean(reshape([x{:}], width, height,[]),3), diffStimImages, 'UniformOutput',false);
+dffStimChangeImages = cellfun(@(x)  nanmean(reshape([x{:}], width, height,[]),3), diffStimImages, 'UniformOutput',false);
 totDffStimChangeImage = mean(reshape([dffStimChangeImages{:}], width,height,[]),3);
 
 %% Calculate stim success
@@ -269,7 +321,8 @@ end
 for plotidx2=1:size(dFFvec,1)
     axes('parent',tab(ceil(plotidx2/10)));
     %plots2(plotidx2)=subplot(spot_num+1,5,(plotidx2-10*floor((plotidx2-1)/10)-1)*13+6);
-    plots2(plotidx2)=subplot(10+1,3,(plotidx2-10*floor((plotidx2-1)/10)-1)*3+1:(plotidx2-10*floor((plotidx2-1)/10)-1)*3+2);
+    lw = 12; % controls line plot size
+    plots2(plotidx2)=subplot(10+1,lw,(plotidx2-10*floor((plotidx2-1)/10)-1)*lw+1:(plotidx2-10*floor((plotidx2-1)/10)-1)*lw+2);
     %plots2(plotidx2)=subplot(10,3,plotidx2);
     dFFcell = [dFFvec{plotidx2}{:}];
     dFFavg{plotidx2}=mean([dFFvec{plotidx2}{:}],2);
@@ -315,7 +368,7 @@ hold off
 
 stimTime = find(Tavg==0);
 avgWindow = [dFFavg{:}];
-avgWindow = avgWindow(stimTime+1:stimTime+11,:)';
+avgWindow = avgWindow(stimTime+Omitpost:stimTime+Omitpost+postCalcPeriod,:)';
 dFFint = mean(avgWindow,2);
 for i = 1:size(SpotMat)
     mask_array(:,:,i) = SpotMat{i};
@@ -410,4 +463,162 @@ imagesc(baselineImg);hold on; axis equal; axis tight;colormap(localDiffPlot);
 title('global baseline image');
 colorbar; hold off
 
+%% save figure and data
+
+savefig(figPat);
+save(saveDataPat, 'patternTrialsValid','frameidx','avgImg','maxImg','stdImg','baselineImg',...
+    'F','dFFvec','dffLocalMeans','totDffLocalMean',...
+    'dffStimChangeImages', 'totDffStimChangeImage', 'stimFrames', 'spots', 'dFFint');
+
+%% optional - load in caiman info
+
+if ~isempty(cmFile)
+   
+    cm = load(cmFile);
+    % handle transposes - might have to remove if we fix processing in
+    % CaImAn
+    cm.A = permute(cm.A,[1 3 2]);
+    cm.bg = permute(cm.bg,[1 2]);
+    cm.b = permute(cm.b,[1 3 2]);
+    cm.masks = permute(cm.masks,[1 3 2]);
+    
+    % get F values from total CaImAn movie (including background)
+    % get mask components
+    % get matching indices for stim sites
+    
+    match_cutoff=.1;
+    normSpots = zeros(length(SpotMat),1,size(SpotMat{1},1), size(SpotMat{1},2));
+    cm.spotFmatch = zeros(length(SpotMat), size(cm.C,1));
+    cm.spotdFFmatch = zeros(length(SpotMat), size(cm.C,1));
+    cm.spotSmatch = zeros(length(SpotMat), size(cm.C,1));
+    cm.spotmatch = boolean(length(SpotMat));
+    for i=1:length(SpotMat)
+        spot = SpotMat{i};
+        spot = spot ./ norm(spot,2);
+        spot = reshape(spot,[],size(spot,1),size(spot,2));
+        normSpots(i,1,:,:) = spot;
+        dotprods = sum(sum(cm.A .* spot,2),3);
+        [prodval, prodarg] = max(dotprods);
+        if prodval <= match_cutoff
+            cm.spotmatch(i) = false;
+            cm.spotinds(i) = NaN;
+            cm.spotFmatch(i,:) = squeeze(NaN(size(cm.C(:,1))));
+            cm.spotSmatch(i,:) = squeeze(NaN(size(cm.C(:,1))));
+            cm.spotdFFmatch(i,:) = squeeze(NaN(size(cm.C(:,1))));
+        else
+            cm.spotmatch(i) = true;
+            cm.spotinds(i) = prodarg;
+            cm.spotFmatch(i,:) = squeeze(cm.C(:,prodarg));
+            cm.spotSmatch(i,:) = squeeze(cm.S(prodarg,:));
+            cm.spotdFFmatch(i,:) = squeeze(cm.df_f(prodarg,:));
+        end
+            
+    end
+    
+
+    cm.spotAcomps = squeeze(sum( sum(normSpots .* reshape(cm.A,[1 size(cm.A)]),3),4));
+    cm.spotbcomps = squeeze(sum( sum(normSpots .* reshape(cm.b,[1 size(cm.b)]),3),4));
+    cm.spotFmov = squeeze(sum(reshape(cm.spotAcomps, [size(cm.spotAcomps) 1]) .* reshape(cm.C',[1 size(cm.C')]),2)) +squeeze(sum(reshape(cm.spotbcomps, [size(cm.spotbcomps) 1] ).* reshape(cm.f',[1 size(cm.f')]),2));
+    
+    
+    for i=1:length(SpotMat)
+        if ~cm.spotmatch(i)
+            cm.spotFmatch(i,:) = squeeze(cm.spotFmov(i,:));
+        end
+    end
+    
+    clear normSpotTemp;
+    
+    [cm.dFFvec, cm.spikevec , cm.stimFrames] = stimTrigResponseCaiman(cm.spotFmatch',cm.spotdFFmatch',cm.spotSmatch', cm.spotmatch,prefigs,postfigs,Omitpre,...
+                                           Omitpost,patternTrialsValid,frameidx, Diffidx, ...
+                                           localSize, spots,...
+                                           preCalcPeriod, postCalcPeriod);
+                                       
+    cm.trialAvgdFF = cellfun( @(x) mean([x{:}],2), cm.dFFvec, 'UniformOutput', false);
+     w = gausswin(4);
+     w = w ./ sum(w);
+    cm.trialAvgSpikes = cellfun( @(x) filter(w,1,mean([x{:}],2)), cm.spikevec, 'UniformOutput', false);
+end
+
+%% caiman figure
+
+
+
+h1=figure;
+TabNum=floor(spot_num/10)+(rem(spot_num,10)>0)*1;
+tabgp = uitabgroup(h1,'Position',[0.4 .05 .55 .95]);
+for tabs=1:TabNum
+    tab(tabs) = uitab(tabgp,'Title',['Cells ',num2str((tabs-1)*10+1),'-',num2str((tabs-1)*10+10), ' Stim Traces']);
+end
+
+for plotidx2=1:size(cm.dFFvec,1)
+    axes('parent',tab(ceil(plotidx2/10)));
+    %plots2(plotidx2)=subplot(spot_num+1,5,(plotidx2-10*floor((plotidx2-1)/10)-1)*13+6);
+    lw = 12; % controls line plot size
+    plots2(plotidx2)=subplot(10+1,lw,(plotidx2-10*floor((plotidx2-1)/10)-1)*lw+1:(plotidx2-10*floor((plotidx2-1)/10)-1)*lw+2);
+    %plots2(plotidx2)=subplot(10,3,plotidx2);
+    dFFcell = [cm.dFFvec{plotidx2}{:}];
+    dFFavg{plotidx2}=mean([cm.dFFvec{plotidx2}{:}],2);
+    dFFSEM{plotidx2}=std(dFFcell,0,2)/sqrt(size([cm.dFFvec{plotidx2}{:}],2));
+    %     ActualStims(plotidx2,1:size(cm.dFFvec,2)) = cellfun(@(x) dot(dFavg(plotidx2,:),x)./(norm(dFavg(plotidx2,:))*norm(x)),cm.dFFvec(plotidx2,:));
+    Tavg=-prefigs+Omitpre:postfigs+1-Omitpost; % the time for the average df/f plot
+    plot(Tavg,dFFavg{plotidx2},'r','Linewidth',1);
+    hold on
+    errorshade(Tavg,dFFavg{plotidx2},dFFSEM{plotidx2},dFFSEM{plotidx2},'r','scalar');
+    ylim([mean(dFFavg{plotidx2})-3*std(dFFavg{plotidx2}) mean(dFFavg{plotidx2})+3*std(dFFavg{plotidx2})])
+    xlim([Tavg(1)-1 Tavg(end)+1]);
+    
+    %     GoodStim(plotidx2)=sum(StimEff(plotidx2,:));
+    %     AmpMean(plotidx2)=mean(nonzeros(StimAmp(plotidx2,:)));
+    %     AmpSTD(plotidx2)=std(nonzeros(StimAmp(plotidx2,:)));
+    
+    plot([0,0],[get(plots2(plotidx2),'ylim')],'--b')
+    %     ylabel({['Cell # ',num2str(plotidx2)],[num2str(GoodStim(plotidx2)),'/',...
+    %         num2str(size(StimEff,2)),' stimulated'],['Avg Amp ',num2str(AmpMean(plotidx2))]...
+    %         '\DeltaF/F_0 Avg'},'FontSize',7);
+    ylabel({['Cell # ',num2str(plotidx2)],...
+        '\DeltaF/F_0 Avg'},'FontSize',7);
+    xlabel('# Frames from stim onset');
+    set(gca,'FontSize',5);
+end
+
+
+axes('parent',h1)
+imgtot=subplot(2,12,2:4);
+imagesc(stdImg);hold on; colormap(imgtot,'gray');title('Stack average');
+caxis([0 450]);
+axis equal
+axis tight
+
+plot_spots(spots)
+hold off
+
+stimTime = find(Tavg==0);
+avgWindow = [dFFavg{:}];
+avgWindow = avgWindow(stimTime+Omitpost:stimTime+Omitpost+postCalcPeriod,:)';
+dFFint = mean(avgWindow,2);
+for i = 1:size(SpotMat)
+    mask_array(:,:,i) = SpotMat{i};
+end
+responders_idx = 1:size(SpotMat);
+
+resp_ax = subplot(2,12,14:16);
+response_map = Response_Map(cm.spotmatch,responders_idx,mask_array);
+imagesc(response_map)
+colormap(resp_ax,'hot')
+% caxis([.995 max(unique(response_map))])
+axis equal
+axis tight
+colorbar
+title('Regions found in Caiman');
+hold on
+plot_spots(spots)
+
+
+cmFigPat = char(figPat);
+cmFigPat = [cmFigPat(1:end-4) '_caiman.fig'];
+cmDataPat = char(saveDataPat);
+cmDataPat = [cmDataPat(1:end-4) '_caiman.mat'];
+save(cmDataPat, 'cm');
+savefig(cmFigPat);
 

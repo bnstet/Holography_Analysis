@@ -2,6 +2,13 @@ clear all
 close all
 clc
 tic
+%% Experiment settings
+expt_loc = '/gpfs/data/shohamlab/shared_data/jon_2p_data/JG1150/'; 
+preCalcPeriod=8;
+postCalcPeriod=8;
+stimframes = 3;
+
+
 %% Setting the analysis parameters
 [StimLength,Omitpre,Omitpost,prefigs,postfigs] = SetAnalysisParameters();
 
@@ -11,7 +18,7 @@ tic
 
 % Seperating the pattern to the different cells and show figs on subplots
 % [ Xcoordinates , Ycoordinates ] = Cam_spot_builder( pattern, sizesave, xsave ,ysave  );
-[fnamePat, fpathPat]=uigetfile('','Please choose the ROI file',['E:\StimTrials\',datestr(now,'yymmdd')]);
+[fnamePat, fpathPat]=uigetfile('','Please choose the ROI file',expt_loc);
 ROIS = ReadImageJROI([fpathPat fnamePat]);
 imsize = zeros(512);
 for idx = 1:length(ROIS)
@@ -29,17 +36,18 @@ for idx=1:spot_num
     Spotidx{idx}=sub2ind(size(imsize),Xcoordinates{idx},Ycoordinates{idx});
     SpotMat{idx}(Spotidx{idx})=1;
 end
+SpotMat = cellfun(@int16,SpotMat, 'UniformOutput',false);
 %% loading the H5 file
-[fnameH5, fpathH5]=uigetfile('*.h5','Please choose the hdf5 file of the experiment','C:\VoyeurData');
+[fnameH5, fpathH5]=uigetfile('*.h5','Please choose the hdf5 file of the experiment',expt_loc);
 
 % Getting the signals from the HDF5 file, "M" keeps the data in
 % Trials structure and "m" concatenates all trials to one colom.
-[ M, m ] = HDF5reader( fpathH5,fnameH5,'frame_triggers','sniff','lick1','lick2');
+[ M, m ] = HDF5reader( fpathH5,fnameH5, 0,'frame_triggers','sniff','lick1','lick2');
 [ M.packet_sent_time, M.sniff_samples, m.packet_sent_time,...
     m.sniff_samples] = HDF5Eventsreader( fpathH5,fnameH5);
 
 %% Checking how many images we have in all the relevant files
-[name,path]=uigetfile('*.tif','Please choose the first Tiff Stack files of this session',['E:\StimTrials\',datestr(now,'yymmdd')]);
+[name,path]=uigetfile('*.tif','Please choose the first Tiff Stack files of this session',expt_loc);
 fname=[path,name];
 filenum=1;
 while exist(fname,'file')==2
@@ -97,7 +105,7 @@ while exist(fname,'file')==2
     Diffidx=find((frameidx>initialFrame)&(frameidx<initialFrame+num_images_temp));
     
     [ normDiff(1:width,1:height,Diffidx), Diff(1:width,1:height,Diffidx),PreStim(1:width,1:height,Diffidx),...
-     PostStim(1:width,1:height,Diffidx)] = DiffAvgFigsLongMeasurements( m, Stack ,frameidxtemp ,prefigs ,postfigs,Omitpost );
+     PostStim(1:width,1:height,Diffidx)] = DiffAvgFigsLongMeasurements( m, Stack ,frameidxtemp , 10, 10,stimframes, preCalcPeriod, postCalcPeriod );
     
     %%
     name(end-4)=num2str(str2num(name(end-4))+1);
@@ -107,24 +115,24 @@ while exist(fname,'file')==2
 end
 
 %F=F-minimum; % set the lowest value at zero
-F=F-min(F(:)); % set the lowest value at zero
+%F=F-min(F(:)); % set the lowest value at zero
     %% Calculating dF/F signal
     F0=prctile(F,5,1);% We define F0 as the lowest 5% of the fluorescence signal over time.
     dF=(F-F0)./F0;
 
 %% Building the plot figure
 
-overlay=zeros(size(pattern,1),size(pattern,2),spot_num);
+overlay=zeros(height,width,spot_num);
 h1=figure;
 for idx=1:spot_num
     img(idx)=subplot(spot_num+1,12,(idx-1)*12+4:(idx-1)*12+5);% Includes saving room for sniff and trig time plot
-    overlaytemp=(SpotMat{idx}==0).*Stack(:,:,round(size(Stack,3)/2));
+    overlaytemp=int16(SpotMat{idx}==0).*Stack(:,:,round(size(Stack,3)/2));
     overlaytemp(overlaytemp==0)=max(max(overlaytemp));
     overlay(:,:,idx)=overlaytemp;
     imagesc(overlay(:,:,idx));axis equal;colormap('hot');
 end
 Patidx=cat(3, SpotMat{:});Patidx=sum(Patidx,3);
-totoverlay=(Patidx==0).*(Stack(:,:,round(size(Stack,3)/2)));totoverlay(totoverlay==0)=max(max(totoverlay));
+totoverlay=int16(Patidx==0).*(Stack(:,:,round(size(Stack,3)/2)));totoverlay(totoverlay==0)=max(max(totoverlay));
 img(idx+1)=subplot(spot_num+1,12,(idx)*12+4:(idx)*12+5);imagesc(totoverlay);axis equal;
 
 %% plotting dF/F , sniff and triggers time
@@ -159,7 +167,7 @@ sld = uicontrol('Style', 'slider','Units','normalized','Min',0,'Max',1,'SliderSt
 % Omitpre=1;% # frames to omit before stimulation to avoid stim artifact
 % Omitpost=3;% # frames to omit after stimulation to avoid stim artifact
 %[dFvec,frameidx] = AvgFluorescenseTrials( m, dF,0 ); % for global f0
-[dFvec,frameidx,Ft0] = AvgFluorescenseTrials( m, F ,1,F0,Omitpre,Omitpost); % for local f0
+[dFvec,frameidx,Ft0] = AvgFluorescenseTrials( m, F ,1,prefigs, postfigs,Omitpre,Omitpost, preCalcPeriod, postCalcPeriod); % for local f0
 
 dFvecmat=cell2mat(dFvec');
 for plotidx2=1:size(dFvec,1)
@@ -172,9 +180,9 @@ for plotidx2=1:size(dFvec,1)
     dFcell = [dFvec{plotidx2,:}];
     dFavg(plotidx2,1:size(dFvec{1,1},1))=mean([dFvec{plotidx2,:}],2);
     dFSEM(plotidx2,1:size(dFvec{1,1},1))=std(dFcell,0,2)/sqrt(size([dFvec{plotidx2,:}],2));
-    plot(-30+Omitpre:61-Omitpost,dFavg(plotidx2,:),'r','LineWidth',1); ylabel('\DeltaF/F_0 Avg');
+    plot(-prefigs + Omitpre - 1:postfigs - Omitpost,dFavg(plotidx2,:),'r','LineWidth',1); ylabel('\DeltaF/F_0 Avg');
     hold on
-    errorshade(-30+Omitpre:61-Omitpost,dFavg(plotidx2,:),dFSEM(plotidx2,:),dFSEM(plotidx2,:),'r','scalar');
+    errorshade(-prefigs + Omitpre - 1:postfigs - Omitpost,dFavg(plotidx2,:),dFSEM(plotidx2,:),dFSEM(plotidx2,:),'r','scalar');
 %         plot(-31+Omitpre:60-Omitpost,smoothdfavg,'r','LineWidth',1); ylabel('\DeltaF/F_0 Avg');
     ylim([mean(dFavg(plotidx2,:))-2.5*std(dFavg(plotidx2,:)) mean(dFavg(plotidx2,:))+2.5*std(dFavg(plotidx2,:))])
     %ylim([min(dFvecmat(:,plotidx2)) max(dFvecmat(:,plotidx2))]); 
