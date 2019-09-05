@@ -1,0 +1,118 @@
+%% experiment trace file should be 
+
+
+if ~exist('plotOn')
+   plotOn = false;
+end
+
+
+% match stim sites in SpotMat, Spotidx (and used in patternTrials) to masks
+maskIdx=zeros(size(Spotidx));
+maskMatchMeas = zeros(size(Spotidx));
+for i=1:numel(maskIdx)
+    thisSpot = SpotMat{i};
+    nOverlaps = cellfun(@(x) sum(thisSpot(x)), spotidx);
+    [maskMatchMeas(i) , maskIdx(i)] = max(nOverlaps);
+end
+maskIdx = uint16(maskIdx);
+
+
+% create numTrials length vector recording the stim mask number for each
+% trial
+[patternTrialsUnroll,~] = find(cell2mat(cellfun(@(x) ismember(1:size(frameidx,2),x), patternTrials, 'UniformOutput',  false)'));
+maskTrials = maskIdx(patternTrialsUnroll);
+patternTrialsUnroll = uint16(patternTrialsUnroll);
+maskTrials = uint16(maskTrials);
+
+
+%% reshape fluorescence traces into windows around stim period
+fullwindow = [(-fullWindowPreSize:-1) (0:fullWindowPostSize)]' + frameidx;
+%prestimwindow = (-preCalcPeriod:-Omitpre)' + frameidx; prestimlen = size(prestimwindow,1);
+%poststimwindow = (Omitpost+1:postCalcPeriod)' + frameidx; poststimlen = size(poststimwindow,1);
+%fullwindow = cat(1, prestimwindow,poststimwindow);
+%prestimwindow = reshape(prestimwindow,1,[]);
+%poststimwindow = reshape(poststimwindow,1,[]);
+fullwindow = reshape(fullwindow,1,[]);
+fullwindow = min(fullwindow,size(F,1));
+
+Fcentered = reshape(F(fullwindow,:),fullWindowPreSize + fullWindowPostSize + 1,[],size(F,2));
+
+% get indices of pre-post periods in the new stim-centered array
+prestiminds = fullWindowPreSize + (-preCalcPeriod:-Omitpre);
+poststiminds = fullWindowPreSize + 1 + (Omitpost:postCalcPeriod);
+
+
+
+%% get stim-centered stats (dff, response snr, response type,..)
+prestimmean = mean(reshape(Fcentered(prestiminds,:,:),numel(prestiminds),[],size(F,2)),1);
+poststimmean = mean(reshape(Fcentered(poststiminds,:,:),numel(poststiminds),[],size(F,2)),1);
+prestimstd = std(reshape(Fcentered(prestiminds,:,:),numel(prestiminds),[],size(F,2)),1);
+poststimstd = std(reshape(Fcentered(poststiminds,:,:),numel(poststiminds),[],size(F,2)),1);
+
+dff = single(squeeze((poststimmean - prestimmean) ./ prestimmean));
+respsnr = single(squeeze( (poststimmean - prestimmean) ./ prestimstd)); % dF / stddev of prestim measurement period
+resptype = int8(reshape( discretize(respsnr(:), [-inf -1 1 inf]) - 2, size(respsnr))); % -1 for inhibition, 1 for response, 0 otherwise
+dffmean = squeeze(mean(dff,1));
+
+
+%% create stat and trial info tables
+
+[triallabel, celllabel] = ind2sub(size(dff), 1:numel(dff));
+
+trialstattab = table(uint16(triallabel(:)), uint16(celllabel(:)),  dff(:), respsnr(:), resptype(:),'VariableNames', {'trial','cell','dff','respsnr','resptype'} ); %, 'VariableTypes',{'uint16','uint16','single','single','int8'});
+trialinfotab = table( uint16((1:size(dff,1))'), patternTrialsUnroll(:),maskTrials(:),'VariableNames', {'trial','pattern', 'mask'});
+
+%%
+
+
+
+
+
+
+
+
+
+
+
+%%
+% if exist('patternTrials')
+%     for imask=1:numel(spotidx)
+%         [a,b] = ismember(imask,maskIdx);
+%         if a
+%             stimTrials = patternTrials{b};     
+%         else
+%             stimTrials = [];
+%         end
+%         thisMask = imask;
+%         notThisMask = 1:size(dff,2); notThisMask(thisMask) = [];
+%         nonStimTrials = 1:size(dff,1); nonStimTrials(stimTrials)=[];
+%         
+%         sameStimDf{imask} = dff(stimTrials,thisMask);
+%         diffStimDf{imask} = dff(nonStimTrials,thisMask);
+%         
+%     end
+%     meanSameStim = cellfun(@(x) mean(x(:)),sameStimDf);
+%     meanDiffStim = cellfun(@(x) mean(x(:)),diffStimDf);
+%     stdSameStim = cellfun(@(x) std(x(:)),sameStimDf);
+%     stdDiffStim = cellfun(@(x) std(x(:)),diffStimDf);
+% end
+% 
+% % student 2 sample t test scores for each stimmed mask
+% 
+% nstim = cellfun(@numel, patternTrials);
+% nnonstim = sum(nstim) - nstim;
+% stimtscores = (meanSameStim(maskIdx) - meanDiffStim(maskIdx)) ./ sqrt( (stdSameStim(maskIdx).^2 ./ nstim) + (stdDiffStim(maskIdx).^2 ./ nnonstim));
+% 
+% 
+% if plotOn
+%     figure; hold on; 
+%     samebar=bar(meanSameStim(:), 'b');
+%     diffbar=bar(meanDiffStim(:), 'r'); 
+%     samebar.FaceAlpha = 0.5;
+%     diffbar.FaceAlpha = 0.5;
+%     xlabel('mask index');
+%     ylabel('mean df/f during stim periods')
+%     legend('same-cell stimulation','different-cell stimulation');
+%     hold off;
+%     imask=1; cellf = Fcentered([prestiminds poststiminds],patternTrials{imask},imask); figure; plot(mean(cellf,2))
+% end

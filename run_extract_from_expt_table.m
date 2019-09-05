@@ -37,7 +37,10 @@ expt_info_file = char(fullfile(mddir,mytab.voyeur{:}));
 
 red_channel = 0;
 
+% primary extraction loop
 save_name = traces_from_files(mov_dir, mov_pattern, holo_path, mask_dir, expt_info_file,red_channel);
+
+
 save(save_name, 'date', 'mouse', '-append');
 
 end
