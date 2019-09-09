@@ -22,7 +22,7 @@ maskMatchMeas = zeros(size(expfile.Spotidx));
 nOverlaps = {};
 for i=1:numel(maskIdx)
     thisSpot = expfile.SpotMat{i}; % this is the stim spot
-    nOverlaps{i} = cellfun(@(x) sum(thisSpot(x)), expfile.spotidx); %expfile.spotidx is a cell array of the  linear index lists for the cell masks
+    nOverlaps{i} = cellfun(@(x) sum(thisSpot(x)), expfile.maskinds); %expfile.maskinds is a cell array of the  linear index lists for the cell masks
     [maskMatchMeas(i) , maskIdx(i)] = max(nOverlaps{i});
 end
 maskIdx = uint16(maskIdx);
